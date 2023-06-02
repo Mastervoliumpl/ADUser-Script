@@ -48,8 +48,8 @@ foreach ($user in $userData) {
     $fullName = $user.FullName
     $firstName, $lastName = $fullName -split ' ', 2
     $email = $user.Email
-    # Extract the DCs from the domain's DistinguishedName
-    $dc = $domain.DistinguishedName -replace '^DC=' -replace ',DC=', '.'
+    # Split the domain name into DCs and join them with ',DC='
+    $dc = 'DC=' + ($domainName -split '\.' -join ',DC=')
     # Set the OU and DC path
     $ou = "OU=$($user.OU),$dc"
     
@@ -60,8 +60,9 @@ foreach ($user in $userData) {
     }
 
     # Create the new user in Active Directory
+    $newUser = $null
     try {
-        New-ADUser `
+        $newUser = New-ADUser `
             -Name "$firstName $lastName" `
             -SamAccountName $username `
             -UserPrincipalName "$username@$domainName" `
@@ -72,26 +73,9 @@ foreach ($user in $userData) {
             -Enabled $true `
             -Path $ou `
             -PassThru
-        # Log the success message
-        
-        $successMessage = @{
-            Timestamp = Get-Date -Format o
-            Level     = 'INFO'
-            Message   = "Successfully created user: $username"
-            Details   = @{
-                FullName  = $fullName
-                FirstName = $firstName
-                LastName  = $lastName
-                Email     = $email
-                OU        = $ou
-            }
-        }
-        Write-Host ($successMessage | ConvertTo-Json)
-        Add-Content -Path $logPath -Value ($successMessage | ConvertTo-Json)
-
-        # Log the error message if the user creation fails
     }
     catch {
+        # Log the error message if the user creation fails
         $errorMessage = @{
             Timestamp = Get-Date -Format o
             Level     = 'ERROR'
@@ -107,7 +91,25 @@ foreach ($user in $userData) {
         }
         Write-Host ($errorMessage | ConvertTo-Json)
         Add-Content -Path $logPath -Value ($errorMessage | ConvertTo-Json)
-        continue
+    }
+
+    # Check if the user was created
+    if ($null -ne $newUser) {
+        # Log the success message
+        $successMessage = @{
+            Timestamp = Get-Date -Format o
+            Level     = 'INFO'
+            Message   = "Successfully created user: $username"
+            Details   = @{
+                FullName  = $fullName
+                FirstName = $firstName
+                LastName  = $lastName
+                Email     = $email
+                OU        = $ou
+            }
+        }
+        Write-Host ($successMessage | ConvertTo-Json)
+        Add-Content -Path $logPath -Value ($successMessage | ConvertTo-Json)
     }
 
     # Add the new user to the Remote Desktop Users group
